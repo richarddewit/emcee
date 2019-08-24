@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+
+# Variables
+script="$(basename "$0")"
+hostsfile=/etc/hosts
+default_ip="127.0.0.1"
+
+## Colors
+red=31
+yellow=33
+
+## Detect platform
+case "$(uname -s)" in
+  Linux)
+    platform="linux";;
+  Darwin)
+    platform="macos";;
+  CYGWIN*|MINGW*|MSYS*)
+    platform="windows";;
+  *)
+    platform="other";;
+esac
+
+
+# Utils
+mc_is_windows() {
+  [ "$platform" == "windows" ]
+}
+
+mc_is_linux() {
+  [ "$platform" == "linux" ]
+}
+
+mc_is_macos() {
+  [ "$platform" == "macos" ]
+}
+
+mc_print_color() {
+  printf "\e[%sm%s\e[m" "$1" "$2"
+}
+
+mc_prepend() {
+  color="${2-$yellow}"
+  prefix="$(mc_print_color "$color" "$(printf "%-3s | " "${1-EMCEE}")")"
+  while IFS= read -r line; do
+    echo -e "${prefix}${line}"
+  done
+}
+
+mc_error() {
+  printf '\a%s\n' "$1" | mc_prepend "ERROR" $red >&2
+}
+
+mc_die() {
+  mc_error "$1"
+  exit 1
+}
+
+if mc_is_windows; then
+  # Path to windows hosts file
+  hostsfile="$(cmd //C echo %WINDIR%)\System32\drivers\etc\hosts"
+fi
+
+mc_win_run_as_admin() {
+  command="$1"
+  [ -z "$command" ] && mc_die "Run_as_admin missing command argument"
+
+  echo "Running command with privileges, prepare for UAC popup (if enabled)..." | mc_prepend
+  powershell -Command "Start-Process cmd -ArgumentList  \"/c\",\"$command\" -Verb RunAs" -windowstyle hidden
+  # Add slight delay to avoid out-of-sync issues (e.g. grep still seeing the host in hostsfile)
+  sleep 0.1
+}
+
+mc_find_in_hosts() {
+  awk "/\s+$1\s*$/" "$hostsfile"
+}
+
+mc_help() {
+  echo "emcee - Master of Ceremonies: add and remove entries in your /etc/hosts file" | mc_prepend
+  echo "~~~~~" | mc_prepend
+  echo "" | mc_prepend
+  echo "Usage:" | mc_prepend
+  echo "    $script add <hostname> [<ip>]      (ip is optional, defaults to $default_ip)" | mc_prepend
+  echo "    $script remove <hostname>" | mc_prepend
+  echo "    $script -h or --help               Show this message" | mc_prepend
+  exit 0
+}
+
+
+# Commands
+remove() {
+  hostname="$1"
+  if [ -n "$(mc_find_in_hosts "$hostname")" ]; then
+    echo "$hostname found in your $hostsfile, removing..." | mc_prepend
+    if mc_is_windows; then
+      # findstr cannot write back to the same file, so create a .tmp first and remove it
+      command="(copy /Y $hostsfile $hostsfile.tmp 1>NUL) && (findstr /V $hostname $hostsfile.tmp > $hostsfile) && (del $hostsfile.tmp)"
+      mc_win_run_as_admin "$command"
+    else
+      sudo sed -i".bak" -E "/\s+${hostname}$/d" "$hostsfile"
+    fi
+
+    if [ -z "$(mc_find_in_hosts "$hostname")" ]; then
+      echo "$hostname was removed succesfully" | mc_prepend
+    else
+      mc_die "Failed to remove $hostname"
+    fi
+  else
+    echo "$hostname was not found in your $hostsfile" | mc_prepend
+  fi
+}
+
+add() {
+  hostname="$1"
+  ip="${2-$default_ip}"
+  if [ -n "$(mc_find_in_hosts "$hostname")" ]; then
+    echo "$hostname already exists:" | mc_prepend
+    mc_find_in_hosts "$hostname" | mc_prepend
+  else
+    echo "Adding $hostname to your $hostsfile" | mc_prepend
+    if mc_is_windows; then
+      # Notes for Batch commands:
+      #  - `echo(` echos a new line
+      #  - don't put spaces between operators, they will be echo'd too
+      command="(echo(&&echo $(printf '%s\t%s' "$ip" "$hostname"))>>$hostsfile"
+      mc_win_run_as_admin "$command"
+    else
+      printf '%s\t%s\n' "$ip" "$hostname" | sudo tee -a "$hostsfile" > /dev/null
+    fi
+
+    if [ -n "$(mc_find_in_hosts "$hostname")" ]; then
+      echo "$hostname was added succesfully:" | mc_prepend
+      mc_find_in_hosts "$hostname" | mc_prepend
+    else
+      mc_die "Failed to add $hostname"
+    fi
+  fi
+}
+
+show() {
+  hostname="$1"
+  found="$(mc_find_in_hosts "$hostname")"
+  if [ -n "$found" ]; then
+    echo "$hostname found:" | mc_prepend
+    mc_find_in_hosts "$hostname" | mc_prepend
+  else
+    mc_die "$hostname not found"
+  fi
+}
+
+
+# Execution
+[[ "$1" =~ ^(-h|--help)$ ]] && mc_help
+
+# Test if first argument is a function
+if [[ "$1" =~ ^(add|remove|show)$ ]] ; then
+  [ -z "$2" ] && mc_die "Missing hostname"
+
+  # Execute arguments
+  "$@"
+else
+  mc_die "Unknown option '$1'"
+fi
+echo
