@@ -4,7 +4,7 @@ Master of Ceremonies - add and remove entries in your /etc/hosts file
 ## Install
 
 ```bash
-$ curl -Lo- git.io/emcee-install | bash
+$ curl -Lo- git.io/emcee-installer | bash
 ```
 
 ## Commands
