@@ -7,6 +7,7 @@ default_ip="127.0.0.1"
 
 ## Colors
 red=31
+green=32
 yellow=33
 
 ## Detect platform
@@ -49,6 +50,10 @@ mc_prepend() {
 
 mc_error() {
   printf '\a%s\n' "$1" | mc_prepend "ERROR" $red >&2
+}
+
+mc_done() {
+  printf '\a%s\n' "$1" | mc_prepend "DONE!" $green >&2
 }
 
 mc_die() {
@@ -104,7 +109,7 @@ remove() {
     fi
 
     if [ -z "$(mc_find_in_hosts "$hostname")" ]; then
-      echo "$hostname was removed succesfully" | mc_prepend
+      mc_done "$hostname was removed succesfully"
     else
       mc_die "Failed to remove $hostname"
     fi
@@ -132,8 +137,8 @@ add() {
     fi
 
     if [ -n "$(mc_find_in_hosts "$hostname")" ]; then
-      echo "$hostname was added succesfully:" | mc_prepend
-      mc_find_in_hosts "$hostname" | mc_prepend
+      mc_done "$hostname was added succesfully:"
+      mc_done "$(mc_find_in_hosts "$hostname")"
     else
       mc_die "Failed to add $hostname"
     fi
