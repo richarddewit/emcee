@@ -75,7 +75,7 @@ mc_find_in_hosts() {
   pattern="$1"
   pattern="${pattern//\*/\\*}"
   pattern="${pattern//\./\\.}"
-  awk "/\s+$pattern\s*$/" "$hostsfile"
+  awk "/[ 	]+$pattern[ 	]*$/" "$hostsfile"
 }
 
 mc_help() {
@@ -100,7 +100,7 @@ remove() {
       command="(copy /Y $hostsfile $hostsfile.tmp 1>NUL) && (findstr /V $hostname $hostsfile.tmp > $hostsfile) && (del $hostsfile.tmp)"
       mc_win_run_as_admin "$command"
     else
-      sudo sed -i".bak" -E "/\s+${hostname}$/d" "$hostsfile"
+      sudo sed -i".bak" -E "/[ 	]+${hostname}[ 	]*$/d" "$hostsfile"
     fi
 
     if [ -z "$(mc_find_in_hosts "$hostname")" ]; then
